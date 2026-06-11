@@ -36,6 +36,7 @@ const handler = createMcpHandler(
           .from("tasks")
           .select("*, project:projects(id, name, color)")
           .eq("owner_id", userId)
+          .is("deleted_at", null)
           .order("sort_order");
 
         if (!params.include_completed) {
@@ -118,6 +119,7 @@ const handler = createMcpHandler(
             .select("*, project:projects(id, name, color)")
             .eq("id", params.task_id)
             .eq("owner_id", userId)
+            .is("deleted_at", null)
             .single();
           if (error) throw new Error(error.message);
           task = data;
@@ -127,6 +129,7 @@ const handler = createMcpHandler(
             .select("*, project:projects(id, name, color)")
             .eq("owner_id", userId)
             .eq("status", "open")
+            .is("deleted_at", null)
             .ilike("title", `%${params.title_search}%`)
             .limit(5);
           if (error) throw new Error(error.message);
@@ -161,6 +164,7 @@ const handler = createMcpHandler(
           .from("tasks")
           .select("id, title, status, priority, due_date")
           .eq("parent_task_id", task.id)
+          .is("deleted_at", null)
           .order("sort_order");
 
         // Fetch dependencies (tasks that block this one)
@@ -175,7 +179,8 @@ const handler = createMcpHandler(
           const { data: blockerTasks } = await supabase
             .from("tasks")
             .select("id, title, status")
-            .in("id", blockerIds);
+            .in("id", blockerIds)
+            .is("deleted_at", null);
           blockers = blockerTasks || [];
         }
 
@@ -228,7 +233,7 @@ const handler = createMcpHandler(
           { data: allTasks },
         ] = await Promise.all([
           supabase.from("projects").select("*").eq("owner_id", userId).eq("is_archived", false).order("sort_order"),
-          supabase.from("tasks").select("*, project:projects(id, name, color)").eq("owner_id", userId).eq("status", "open").order("sort_order"),
+          supabase.from("tasks").select("*, project:projects(id, name, color)").eq("owner_id", userId).eq("status", "open").is("deleted_at", null).order("sort_order"),
         ]);
 
         const tasks = allTasks || [];
@@ -402,6 +407,7 @@ const handler = createMcpHandler(
             .select("id, title")
             .eq("owner_id", userId)
             .eq("status", "open")
+            .is("deleted_at", null)
             .ilike("title", `%${params.title_search}%`)
             .limit(5);
 
@@ -501,6 +507,7 @@ const handler = createMcpHandler(
             .select("*")
             .eq("id", params.task_id)
             .eq("owner_id", userId)
+            .is("deleted_at", null)
             .single();
           task = data;
         } else if (params.title_search) {
@@ -509,6 +516,7 @@ const handler = createMcpHandler(
             .select("*")
             .eq("owner_id", userId)
             .eq("status", "open")
+            .is("deleted_at", null)
             .ilike("title", `%${params.title_search}%`)
             .limit(5);
 
@@ -603,6 +611,7 @@ const handler = createMcpHandler(
             .select("id, title")
             .eq("owner_id", userId)
             .eq("status", "open")
+            .is("deleted_at", null)
             .ilike("title", `%${params.title_search}%`)
             .limit(5);
 
@@ -625,9 +634,11 @@ const handler = createMcpHandler(
           taskTitle = data?.title || "";
         }
 
+        // Soft delete — matches the web app. A DB trigger cascades
+        // deleted_at to subtasks; clearing it restores the same batch.
         const { error } = await supabase
           .from("tasks")
-          .delete()
+          .update({ deleted_at: new Date().toISOString() })
           .eq("id", taskId)
           .eq("owner_id", userId);
 
@@ -665,7 +676,8 @@ const handler = createMcpHandler(
           .from("tasks")
           .select("project_id")
           .eq("owner_id", userId)
-          .eq("status", "open");
+          .eq("status", "open")
+          .is("deleted_at", null);
 
         const taskCounts: Record<string, number> = {};
         for (const t of tasks || []) {
@@ -735,6 +747,7 @@ const handler = createMcpHandler(
           .eq("project_id", projectId)
           .is("section_id", null)
           .eq("status", "open")
+          .is("deleted_at", null)
           .order("sort_order");
 
         const result = {
@@ -822,6 +835,7 @@ const handler = createMcpHandler(
           .from("tasks")
           .select("id, title, status, due_date, priority, project:projects(id, name, color)")
           .eq("owner_id", userId)
+          .is("deleted_at", null)
           .ilike("title", `%${params.query}%`)
           .limit(15);
 
